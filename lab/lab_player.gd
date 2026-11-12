@@ -68,8 +68,8 @@ var last_text := ""
 
 var seek_cache: ComboSeekCache
 var pose_offset: PoseOffset
-var seek_auto := false
-var pose_offset_enabled := true
+var use_combo_seek := true
+var combo_seek_decay := 0.10
 
 
 func _ready() -> void:
@@ -113,7 +113,7 @@ func _ready() -> void:
 
 	seek_cache = ComboSeekCache.new()
 	pose_offset = PoseOffset.new()
-	pose_offset.decay_time = 0.10
+	pose_offset.decay_time = combo_seek_decay
 
 
 # -----------------------------------------------------------------------------
@@ -296,19 +296,17 @@ func trigger_clip(key: String, mode_pref := "auto", kind := "special") -> bool:
 		move_dir = -global_transform.basis.z
 		rm = false
 	var seek_to := 0.0
-	if kind == "attack" and _act.get("active", false) and _act.get("kind") == "attack" and seek_auto and seek_cache != null:
-		seek_to = seek_cache.get_seek(String(_act.key), key)
-	if pose_offset_enabled and pose_offset != null and rig != null and rig.skeleton != null and db.anims.has(key):
-		pose_offset.capture(rig.skeleton, db.anims[key], seek_to,
-			["mixamorig_Spine", "mixamorig_Spine1", "mixamorig_Spine2",
-			 "mixamorig_RightArm", "mixamorig_RightForeArm",
-			 "mixamorig_LeftArm", "mixamorig_LeftForeArm"])
+	if use_combo_seek and seek_cache != null and _act.get("kind") == "attack" and kind == "attack":
+		seek_to = seek_cache.get_seek(String(_act.get("key", "")), key)
+	if seek_to > 0.0 and pose_offset != null and rig != null and rig.skeleton != null and db.anims.has(key):
+		pose_offset.decay_time = combo_seek_decay
+		pose_offset.capture(rig.skeleton, db.anims[key], seek_to, ComboSeekCache.BONES)
 	_act = {"active": true, "key": key, "kind": kind, "full": full, "start": _now(), "len": length,
 		"anim": anim, "cancel": cancel, "locks": locks, "rm": rm, "prev_t": 0.0, "hit_done": false,
 		"moving_at_start": moving, "seek_offset": seek_to,
 		"move_during": move_during, "move_speed": move_speed, "move_dir": move_dir}
 	_queued_attack = false
-	rig.play_action(key, full, seek_to)
+	rig.play_action(key, full, 0.12, 0.2, seek_to)
 	if kind == "attack" or kind == "special":
 		_face_yaw_override = _yaw
 		_face_until = _now() + 0.25
@@ -360,12 +358,14 @@ func _physics_process(delta: float) -> void:
 
 	# ---- ação em andamento ----
 	var locked := false
+	var locked_full := false
 	var rm_vel := Vector3.ZERO
 	if _act.get("active", false):
 		var frac := _act_frac()
 		var el: float = _now() - _act.start
 		if _act.locks and frac < _act.cancel:
 			locked = true
+			locked_full = _act.full
 		elif _act.locks and frac >= _act.cancel and has_input and _act.kind in ["attack", "special", "dodge"]:
 			rig.stop_actions()    # cancelado por movimento
 			_end_action()
@@ -376,8 +376,13 @@ func _physics_process(delta: float) -> void:
 			var local := Vector3(-d.x, 0, -d.y)
 			rm_vel = (global_transform.basis * local) / maxf(delta, 0.0001)
 		elif _act.get("active", false) and locked and _act.kind == "dodge" and not _act.rm:
-			var dirv := (-global_transform.basis.z)
-			rm_vel = dirv * 6.0 * (1.0 - clampf(frac, 0.0, 1.0))
+			var dodge_speed := maxf(cur_speed, run_speed)
+			var dirv: Vector3
+			if _act.get("moving_at_start", false):
+				dirv = -global_transform.basis.z
+			else:
+				dirv = global_transform.basis.z
+			rm_vel = dirv * dodge_speed * (1.0 - clampf(frac, 0.0, 1.0))
 		# golpe acerta no meio da animação
 		if _act.get("active", false) and _act.kind in ["attack", "special"] and not _act.hit_done and frac > 0.35:
 			_act.hit_done = true
@@ -409,7 +414,7 @@ func _physics_process(delta: float) -> void:
 		rotation.y = lerp_angle(rotation.y, atan2(-world_dir.x, -world_dir.z), 1.0 - exp(-12.0 * delta))
 
 	# ---- locomoção ----
-	var moving_input := has_input and not locked
+	var moving_input := has_input and not locked_full
 	var slot := "idle"
 	var target_speed := 0.0
 	var ts := 1.0
@@ -432,7 +437,7 @@ func _physics_process(delta: float) -> void:
 		ts = clampf(target_speed / clip_native, 0.35, 2.5)
 	cur_slot = slot
 	cur_speed = move_toward(cur_speed, target_speed, 28.0 * delta)
-	if not moving_input and not locked:
+	if not moving_input and not locked_full:
 		cur_speed = move_toward(cur_speed, 0.0, 40.0 * delta)
 	rig.set_loco(slot if moving_input or cur_speed < 0.3 else slot, ts)
 
@@ -549,4 +554,6 @@ func debug_text() -> String:
 	else:
 		lines.append("Ação: —")
 	lines.append("Velocidade: %.1f m/s   Combo: golpe %d/%d" % [cur_speed, combo_idx + 1, chain.size()])
+	if _act.get("seek_offset", 0.0) > 0.0:
+		lines.append("Seek: +%.2fs no combo  |  offset ativo: %s" % [_act.seek_offset, "sim" if pose_offset and pose_offset.active else "não"])
 	return "\n".join(lines)

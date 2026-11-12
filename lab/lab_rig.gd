@@ -303,7 +303,7 @@ func anim_length(key: String) -> float:
 
 
 ## Toca um clipe uma vez. full=true: corpo inteiro. false: só parte de cima.
-func play_action(key: String, full: bool, seek_to := 0.0, fade_in := 0.12, fade_out := 0.2) -> bool:
+func play_action(key: String, full: bool, fade_in := 0.12, fade_out := 0.2, seek_to := 0.0) -> bool:
 	if tree == null or not path_map.has(key):
 		return false
 	var osu := bt.get_node("OSU") as AnimationNodeOneShot
@@ -325,6 +325,7 @@ func play_action(key: String, full: bool, seek_to := 0.0, fade_in := 0.12, fade_
 		if osf_active():
 			tree.set("parameters/OSF/request", fade)
 	if seek_to > 0.0 and anim_player != null:
+		await Engine.get_main_loop().process_frame
 		anim_player.seek(seek_to, true)
 	return true
 

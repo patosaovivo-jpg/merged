@@ -135,10 +135,10 @@ func _apply_cfg(d: Dictionary) -> void:
 	player.combo_window = d.get("combo_window", 0.5)
 	player.move_cancel = d.get("move_cancel", 0.7)
 	player.mouse_sens = d.get("sens", 0.003)
-	player.seek_auto = d.get("seek_auto", false)
-	player.pose_offset_enabled = d.get("pose_offset_enabled", true)
+	player.use_combo_seek = d.get("use_combo_seek", true)
+	player.combo_seek_decay = d.get("combo_seek_decay", 0.10)
 	if player.pose_offset != null:
-		player.pose_offset.decay_time = d.get("pose_decay", 0.10)
+		player.pose_offset.decay_time = player.combo_seek_decay
 	var bl: Array = d.get("binds", [])
 	for i in mini(bl.size(), 8):
 		if bl[i].get("user", false) and db.has(bl[i].get("key", "")):
@@ -178,9 +178,8 @@ func _queue_save() -> void:
 	cf.set_value(s, "combo_window", player.combo_window)
 	cf.set_value(s, "move_cancel", player.move_cancel)
 	cf.set_value(s, "sens", player.mouse_sens)
-	cf.set_value(s, "seek_auto", player.seek_auto)
-	cf.set_value(s, "pose_offset_enabled", player.pose_offset_enabled)
-	cf.set_value(s, "pose_decay", player.pose_offset.decay_time if player.pose_offset != null else 0.10)
+	cf.set_value(s, "use_combo_seek", player.use_combo_seek)
+	cf.set_value(s, "combo_seek_decay", player.combo_seek_decay)
 	cf.set_value(s, "binds", player.binds)
 	cf.set_value(s, "roles", player.role_override)
 	cf.set_value(s, "chains", player.chain_override)

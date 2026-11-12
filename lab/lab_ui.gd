@@ -388,9 +388,12 @@ func _build_tab_combo() -> void:
 		_chain_opts.append(ao)
 	_slider(vb, "Janela p/ próximo golpe (%)", 0.1, 0.95, 0.05, player.combo_window, func(v): player.combo_window = v; config_changed.emit())
 	_slider(vb, "Cancelar c/ movimento (%)", 0.2, 1.0, 0.05, player.move_cancel, func(v): player.move_cancel = v; config_changed.emit())
-	_chk["seek_auto"] = _check(vb, "Seek automático (encadear do ponto mais parecido)", player.seek_auto, func(v): player.seek_auto = v; config_changed.emit())
-	_chk["pose_offset"] = _check(vb, "Pose offset (suavizar transição)", player.pose_offset_enabled, func(v): player.pose_offset_enabled = v; config_changed.emit())
-	_slider(vb, "Decay do pose offset (s)", 0.05, 0.25, 0.01, player.pose_offset.decay_time, func(v): player.pose_offset.decay_time = v; config_changed.emit())
+	vb.add_child(HSeparator.new())
+	_label(vb, "Encadeamento suave", true)
+	_check(vb, "Seek autom?tico (come?a do ponto mais parecido)", player.use_combo_seek,
+		func(v): player.use_combo_seek = v; player.seek_cache.build(player.db, player.chain))
+	_slider(vb, "Decay do offset (s)", 0.03, 0.30, 0.01, player.combo_seek_decay,
+		func(v): player.combo_seek_decay = v; if player.pose_offset: player.pose_offset.decay_time = v)
 	_label(vb, "Há bonecos de treino na arena: golpes que acertam fazem o boneco piscar/balançar.")
 
 
