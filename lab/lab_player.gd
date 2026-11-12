@@ -66,6 +66,10 @@ var _blocking := false
 var _hit_dummy_cb := Callable()
 var last_text := ""
 
+var aim_mode := false
+var locked_target: Node3D = null
+var lock_on_range := 18.0
+
 var seek_cache: ComboSeekCache
 var pose_offset: PoseOffset
 var use_combo_seek := true
@@ -92,12 +96,13 @@ func _ready() -> void:
 	cam_pivot.top_level = true
 	add_child(cam_pivot)
 	spring = SpringArm3D.new()
-	spring.spring_length = 4.2
+	spring.spring_length = 2.6
 	spring.margin = 0.2
 	spring.add_excluded_object(get_rid())
 	cam_pivot.add_child(spring)
 	cam = Camera3D.new()
 	cam.fov = 65
+	cam.position = Vector3(0.45, 0.0, 0.0)
 	spring.add_child(cam)
 	cam.current = true
 	fill_light = OmniLight3D.new()       # luz de preenchimento (só no modo vitrine)
@@ -202,6 +207,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				jump_pressed()
 			KEY_R:
 				stop_current()
+			KEY_Z:
+				_toggle_aim()
+			KEY_TAB:
+				_toggle_lock_on()
 
 
 func press_bind(i: int) -> void:
@@ -215,6 +224,39 @@ func stop_current() -> void:
 	_queued_attack = false
 	rig.stop_actions()
 
+
+func _is_ranged_weapon() -> bool:
+	var w := String(loadout.get("weapons", [""])[0] if loadout.has("weapons") else "")
+	# active weapon from rig? use first weapon id
+	var ids: Array = loadout.get("weapons", [])
+	if ids.is_empty():
+		return false
+	var id := String(ids[0])
+	return id in ["bow", "pistol", "rifle"]
+
+func _toggle_aim() -> void:
+	if not _is_ranged_weapon():
+		return
+	aim_mode = not aim_mode
+	if not aim_mode:
+		# reset camera distance handled in _update_camera
+		pass
+
+func _toggle_lock_on() -> void:
+	if locked_target != null and is_instance_valid(locked_target):
+		locked_target = null
+		return
+	# find nearest dummy in front within range
+	var best: Node3D = null
+	var best_dist := lock_on_range
+	for n in get_tree().get_nodes_in_group("dummies"):
+		if not (n is Node3D):
+			continue
+		var d := (n as Node3D).global_position.distance_to(global_position)
+		if d < best_dist:
+			best_dist = d
+			best = n as Node3D
+	locked_target = best
 
 func attack_pressed() -> void:
 	if chain.is_empty():
@@ -340,6 +382,8 @@ func _input_world_dir() -> Vector3:
 # Loop físico
 # -----------------------------------------------------------------------------
 func _physics_process(delta: float) -> void:
+	if locked_target != null and not is_instance_valid(locked_target):
+		locked_target = null
 	_update_camera(delta)
 	if rig.tree == null:
 		return
@@ -402,7 +446,13 @@ func _physics_process(delta: float) -> void:
 			_end_action()
 
 	# ---- orientação ----
-	var face_cam := strafe_mode or Input.is_physical_key_pressed(KEY_ALT)
+	var face_cam := strafe_mode or aim_mode or Input.is_physical_key_pressed(KEY_ALT)
+	if locked_target != null and is_instance_valid(locked_target):
+		var to_t := locked_target.global_position - global_position
+		to_t.y = 0.0
+		if to_t.length() > 0.01:
+			rotation.y = lerp_angle(rotation.y, atan2(-to_t.x, -to_t.z), 1.0 - exp(-14.0 * delta))
+			face_cam = false
 	var now := _now()
 	if not is_nan(_face_yaw_override) and now < _face_until:
 		rotation.y = lerp_angle(rotation.y, _face_yaw_override, 1.0 - exp(-24.0 * delta))
@@ -537,6 +587,19 @@ func _update_camera(delta: float) -> void:
 		spring.spring_length = lerpf(spring.spring_length, _cam_len_target, 1.0 - exp(-8.0 * delta))
 		if absf(spring.spring_length - _cam_len_target) < 0.02:
 			_cam_len_target = -1.0
+	# Distância da câmera por modo (RE over-shoulder / mira / lock-on)
+	var target_len := 2.6
+	if aim_mode:
+		target_len = 1.8
+	elif locked_target != null and is_instance_valid(locked_target):
+		target_len = 3.0
+	if _cam_len_target < 0.0:
+		spring.spring_length = lerpf(spring.spring_length, target_len, 1.0 - exp(-8.0 * delta))
+	# Lock-on: aponta a câmera para o alvo
+	if locked_target != null and is_instance_valid(locked_target):
+		var to_t := locked_target.global_position - (global_position + Vector3(0, cam_height, 0))
+		_yaw = atan2(-to_t.x, -to_t.z)
+		_pitch = clampf(-atan2(to_t.y, Vector2(to_t.x, to_t.z).length()), -0.6, 0.4)
 	cam_pivot.global_position = cam_pivot.global_position.lerp(global_position + Vector3(0, cam_height, 0), 1.0 - exp(-16.0 * delta))
 	cam_pivot.rotation = Vector3(_pitch, _yaw, 0)
 
