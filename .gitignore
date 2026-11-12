@@ -1,0 +1,14 @@
+# Godot
+.godot/
+/android/
+.export/
+*.tmp
+
+# Logs locais
+godot_import.txt
+godot_err.txt
+godot_out.txt
+
+# Sistema/IDE
+.DS_Store
+Thumbs.db
