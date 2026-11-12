@@ -147,6 +147,7 @@ func equip_loadout(id: String, play_equip := true) -> void:
 	for r in ["jump", "dodge", "block", "hit", "death", "equip"]:
 		roles[r] = role_override.get(r, LabLoadouts.resolve_role(db, loadout, r, female))
 	strafe_mode = loadout.get("strafe", false)
+	aim_mode = _is_ranged_weapon()
 	if seek_cache != null:
 		seek_cache.build(db, chain)
 	combo_idx = 0
@@ -191,6 +192,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			MOUSE_BUTTON_RIGHT:
 				attack_pressed()
+			MOUSE_BUTTON_MIDDLE:
+				_toggle_lock_on()
 			MOUSE_BUTTON_WHEEL_UP:
 				spring.spring_length = clampf(spring.spring_length - 0.4, 1.2, 10.0)
 			MOUSE_BUTTON_WHEEL_DOWN:
@@ -207,10 +210,6 @@ func _unhandled_input(event: InputEvent) -> void:
 				jump_pressed()
 			KEY_R:
 				stop_current()
-			KEY_Z:
-				_toggle_aim()
-			KEY_TAB:
-				_toggle_lock_on()
 
 
 func press_bind(i: int) -> void:
@@ -232,7 +231,7 @@ func _is_ranged_weapon() -> bool:
 	if ids.is_empty():
 		return false
 	var id := String(ids[0])
-	return id in ["bow", "pistol", "rifle"]
+	return id in ["bow", "pistol", "rifle", "staff"]
 
 func _toggle_aim() -> void:
 	if not _is_ranged_weapon():
@@ -399,6 +398,7 @@ func _physics_process(delta: float) -> void:
 	var world_dir := _input_world_dir()
 	var has_input := world_dir != Vector3.ZERO
 	var running := Input.is_physical_key_pressed(KEY_SHIFT)
+	aim_mode = _is_ranged_weapon()
 
 	# ---- ação em andamento ----
 	var locked := false
