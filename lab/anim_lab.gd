@@ -152,11 +152,22 @@ func _apply_cfg(d: Dictionary) -> void:
 			player.roles[r] = ro[r]
 	player.chain_override = d.get("chains", {})
 	player.slot_overrides = d.get("slots", {})
+	player.weapon_overrides = d.get("weapon_overrides", {})
 	if d.has("look") and d["look"] is Dictionary:
 		player.look.from_dict(d["look"])
 		player.look.apply_all()
 		if ui.visual_tab:
 			ui.visual_tab.refresh()
+	player.aim_fov = d.get("aim_fov", 40.0)
+	player.aim_sens_mult = d.get("aim_sens_mult", 0.4)
+	if player.aim_sys:
+		player.aim_sys.max_range = d.get("aim_range", 60.0)
+	if player.lock_on:
+		player.lock_on.max_range = d.get("lock_max_range", 20.0)
+		player.lock_on.cam_speed = d.get("lock_cam_speed", 6.0)
+		var col_str: String = d.get("lock_indicator_color", "#ffe533")
+		player.lock_on.indicator_color = Color.html(col_str)
+		player.lock_on.set_indicator_color(player.lock_on.indicator_color)
 	player.equip_loadout(player.loadout.id, false)
 	player.strafe_mode = player.loadout.get("strafe", false)
 	ui.refresh_from_player()
@@ -180,10 +191,19 @@ func _queue_save() -> void:
 	cf.set_value(s, "sens", player.mouse_sens)
 	cf.set_value(s, "use_combo_seek", player.use_combo_seek)
 	cf.set_value(s, "combo_seek_decay", player.combo_seek_decay)
+	cf.set_value(s, "aim_fov", player.aim_fov)
+	cf.set_value(s, "aim_sens_mult", player.aim_sens_mult)
+	if player.aim_sys:
+		cf.set_value(s, "aim_range", player.aim_sys.max_range)
+	if player.lock_on:
+		cf.set_value(s, "lock_max_range", player.lock_on.max_range)
+		cf.set_value(s, "lock_cam_speed", player.lock_on.cam_speed)
+		cf.set_value(s, "lock_indicator_color", player.lock_on.indicator_color.to_html())
 	cf.set_value(s, "binds", player.binds)
 	cf.set_value(s, "roles", player.role_override)
 	cf.set_value(s, "chains", player.chain_override)
 	cf.set_value(s, "slots", player.slot_overrides)
+	cf.set_value(s, "weapon_overrides", player.weapon_overrides)
 	cf.set_value(s, "look", player.look.config)
 	cf.save(CFG_PATH)
 

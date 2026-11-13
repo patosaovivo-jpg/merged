@@ -33,9 +33,9 @@ static var WEAPONS := {
 	"mace":       {"file": "res://weapons/mace.fbx",          "hand": "R", "scale": 0.30, "pos": Vector3(0, 0.08, 0), "rot": Vector3(0, 0, -90)},
 	"dagger":     {"file": "res://weapons/adaga.fbx",         "hand": "R", "scale": 0.30, "pos": Vector3(0, 0.08, 0), "rot": Vector3(0, 0, -90)},
 	"shield":     {"file": "res://weapons/escudo.fbx",        "hand": "L", "scale": 0.50, "pos": Vector3(0, 0.08, 0), "rot": Vector3(0, 0, 0)},
-	"bow":        {"file": "res://weapons/arco.fbx",          "hand": "L", "scale": 0.45, "pos": Vector3(0, 0.0, 0), "rot": Vector3(0, 0, 180)},
-	"pistol":     {"file": "res://weapons/Pistola.fbx",       "hand": "R", "scale": 0.03, "pos": Vector3(0, 0.08, 0), "rot": Vector3(0, 0, -90), "recenter": false},
-	"rifle":      {"file": "res://weapons/Rifle.fbx",         "hand": "R", "scale": 0.10, "pos": Vector3(0, 0.05, 0), "rot": Vector3(90, 90, 0), "recenter": false},
+	"bow":        {"file": "res://weapons/arco.fbx",          "hand": "L", "scale": 0.50, "pos": Vector3(0, 0.0, 0), "rot": Vector3(0, 0, 0)},
+	"pistol":     {"file": "res://weapons/Pistola.fbx",       "hand": "R", "scale": 0.03, "pos": Vector3(0, 0.05, -0.02), "rot": Vector3(-90, 0, 0), "recenter": false},
+	"rifle":      {"file": "res://weapons/Rifle.fbx",         "hand": "R", "scale": 0.10, "pos": Vector3(0, 0.08, -0.05), "rot": Vector3(-90, 0, 0), "recenter": false},
 }
 
 const GS := "Pro Sword and Shield Pack/"

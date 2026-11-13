@@ -54,7 +54,7 @@ func build(p_db: LabAnimDB, p_player: LabPlayer, chars: Array) -> void:
 
 	help = Label.new()
 	help.position = Vector2(14, 10)
-	help.text = "WASD mover  |  Shift correr  |  Espaço pular  |  Q rolamento  |  F bloquear (segurar)\n1-8 animações configuráveis  |  Botão direito: ataque / combo  |  Alt: mirar p/ câmera\nClique esquerdo na cena: capturar mouse (câmera)  |  Esc: liberar mouse p/ usar o menu  |  R: parar ação"
+	help.text = "WASD mover  |  Shift correr  |  Espaço pular  |  Q rolamento  |  F bloquear (segurar)\n1-8 animações configuráveis  |  Botão direito: ataque / combo  |  Alt: mirar p/ câmera\nClique esquerdo na cena: capturar mouse (câmera)  |  Esc: liberar mouse p/ usar o menu  |  R: parar ação\nF9: calibrar arma na mão (numpad ajusta pos/rot; 0 imprime no console)"
 	_style_label(help)
 	add_child(help)
 
@@ -270,6 +270,29 @@ func _build_tab_equip() -> void:
 	_slider(vb, "Sensib. mouse", 0.5, 8.0, 0.1, player.mouse_sens * 1000.0, func(v): player.mouse_sens = v / 1000.0; config_changed.emit())
 
 	vb.add_child(HSeparator.new())
+	vb.add_child(HSeparator.new())
+	_label(vb, "Lock-On (estilo Dark Souls)", true)
+	vb.add_child(HSeparator.new())
+	_label(vb, "Lock-On (estilo Dark Souls)", true)
+	var lock_chk := _check(vb, "Lock-On (Scroll do mouse)", player._lock_active, func(v):
+		if v: player._toggle_lock_on()
+		else:
+			if player.lock_on: player.lock_on._deactivate()
+)
+	_slider(vb, "Distancia maxima do lock (m)", 8.0, 40.0, 1.0, player.lock_on.max_range if player.lock_on else 20.0, func(v): if player.lock_on: player.lock_on.max_range = v)
+	_slider(vb, "Velocidade da camera no lock", 2.0, 15.0, 0.5, player.lock_on.cam_speed if player.lock_on else 6.0, func(v): if player.lock_on: player.lock_on.cam_speed = v)
+	vb.add_child(HSeparator.new())
+	_label(vb, "Cor do indicador", true)
+	var sw := HBoxContainer.new()
+	for c in [Color(1.0,0.85,0.2), Color(1.0,0.3,0.3), Color(0.3,0.9,1.0)]:
+		var btn := Button.new()
+		btn.custom_minimum_size = Vector2(24,18)
+		var sbx := StyleBoxFlat.new()
+		sbx.bg_color = c
+		btn.add_theme_stylebox_override("normal", sbx)
+		btn.pressed.connect(func(): if player.lock_on: player.lock_on.set_indicator_color(c))
+		sw.add_child(btn)
+	vb.add_child(sw)
 	var rl := Button.new()
 	rl.text = "Recarregar animações (re-escanear)"
 	rl.clip_text = true
@@ -341,6 +364,20 @@ func _build_tab_binds() -> void:
 		vb.add_child(row)
 		_role_opts[role] = ao
 	_label(vb, "Sem clipe de rolamento no pacote? Q usa um salto como esquiva. Adicione um FBX com 'roll'/'dodge' no nome em ANIMATIONS e ele é detectado sozinho.")
+	vb.add_child(HSeparator.new())
+	_label(vb, "Projeteis (loadouts de distancia)", true)
+	_slider(vb, "FOV na mira", 25.0, 60.0, 1.0, player.aim_fov,
+		func(v): player.aim_fov = v; if player._is_zoomed: player.cam.fov = v)
+	_slider(vb, "Sensib. mouse na mira (mult)", 0.1, 1.0, 0.05, player.aim_sens_mult,
+		func(v): player.aim_sens_mult = v)
+	_slider(vb, "Alcance maximo da mira (m)", 20.0, 120.0, 5.0,
+		player.aim_sys.max_range if player.aim_sys else 60.0,
+		func(v): if player.aim_sys: player.aim_sys.max_range = v)
+	_check(vb, "Modo FPS (esconde o personagem na mira)", player.fps_mode,
+		func(v):
+			player.fps_mode = v
+			player._set_aim_mode(player._aim_active)
+			config_changed.emit())
 
 	vb.add_child(HSeparator.new())
 	_label(vb, "Pré-visualizar qualquer animação", true)

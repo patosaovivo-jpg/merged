@@ -67,8 +67,29 @@ var _hit_dummy_cb := Callable()
 var last_text := ""
 
 var aim_mode := false
-var locked_target: Node3D = null
-var lock_on_range := 18.0
+var lock_on: LabLockOn
+var _lock_active := false
+var lock_strafe_speed_mult := 0.85
+
+var aim_fov := 40.0
+var normal_fov := 65.0
+var aim_sens_mult := 0.4
+var _is_zoomed := false
+var aim_shoulder_offset := Vector3(0.55, 0.12, 0.0)
+var _current_cam_offset := Vector3.ZERO
+var _saved_spring_length := 2.6
+var fps_mode := false
+var _last_fire_time := -10.0
+
+var aim_sys: LabAimSystem
+var spawner: LabProjectileSpawner
+var weapon_debug: LabWeaponDebug
+var weapon_overrides: Dictionary = {}   # id -> {pos: Vector3, rot: Vector3}
+var _aim_active := false
+
+const RANGED_LOADOUTS := ["pistol", "rifle", "bow", "magic"]
+const FIRE_COOLDOWNS := {"pistol": 0.25, "rifle": 0.12, "bow": 0.9, "magic": 0.6}
+const FIRE_DELAYS := {"pistol": 0.08, "rifle": 0.08, "bow": 0.35, "magic": 0.25}
 
 var seek_cache: ComboSeekCache
 var pose_offset: PoseOffset
@@ -102,7 +123,7 @@ func _ready() -> void:
 	cam_pivot.add_child(spring)
 	cam = Camera3D.new()
 	cam.fov = 65
-	cam.position = Vector3(0.45, 0.0, 0.0)
+	cam.position = Vector3(0.85, 0.0, 0.0)
 	spring.add_child(cam)
 	cam.current = true
 	fill_light = OmniLight3D.new()       # luz de preenchimento (só no modo vitrine)
@@ -120,6 +141,19 @@ func _ready() -> void:
 	pose_offset = PoseOffset.new()
 	pose_offset.decay_time = combo_seek_decay
 
+	aim_sys = LabAimSystem.new()
+	add_child(aim_sys)
+	spawner = LabProjectileSpawner.new()
+	add_child(spawner)
+
+	lock_on = LabLockOn.new()
+	add_child(lock_on)
+	lock_on.target_changed.connect(_on_lock_target_changed)
+
+	weapon_debug = LabWeaponDebug.new()
+	add_child(weapon_debug)
+	weapon_debug.setup(self)
+
 
 # -----------------------------------------------------------------------------
 # Personagem / loadout
@@ -128,6 +162,8 @@ func load_character(path: String) -> void:
 	female = path.get_file().begins_with("femea")
 	rig.load_character(db, path)
 	look.bind(rig)
+	if aim_sys:
+		aim_sys.setup(cam, rig.skeleton, self)
 	if not loadout.is_empty():
 		equip_loadout(loadout.id, false)
 
@@ -138,6 +174,7 @@ func equip_loadout(id: String, play_equip := true) -> void:
 	slots = LabLoadouts.resolve_slots(db, loadout, female, slot_overrides.get(id, {}))
 	rig.assign_slots(slots)
 	rig.equip_weapons(loadout.weapons)
+	_apply_weapon_overrides()
 	chain = chain_override.get(id, LabLoadouts.resolve_chain(db, loadout))
 	var sp := LabLoadouts.resolve_specials(db, loadout)
 	for i in 8:
@@ -148,6 +185,8 @@ func equip_loadout(id: String, play_equip := true) -> void:
 		roles[r] = role_override.get(r, LabLoadouts.resolve_role(db, loadout, r, female))
 	strafe_mode = loadout.get("strafe", false)
 	aim_mode = _is_ranged_weapon()
+	var is_ranged: bool = loadout.id in RANGED_LOADOUTS
+	_set_aim_mode(is_ranged)
 	if seek_cache != null:
 		seek_cache.build(db, chain)
 	combo_idx = 0
@@ -155,6 +194,28 @@ func equip_loadout(id: String, play_equip := true) -> void:
 	loadout_changed.emit()
 	if play_equip and roles.get("equip", "") != "":
 		trigger_clip(roles.equip, "upper", "equip")
+
+
+func _apply_weapon_overrides() -> void:
+	if rig == null or rig.skeleton == null:
+		return
+	for id in weapon_overrides:
+		var d: Dictionary = weapon_overrides[id]
+		var att := rig.skeleton.get_node_or_null("Weapon_" + String(id))
+		if att == null or att.get_child_count() == 0:
+			continue
+		var wrap := att.get_child(0) as Node3D
+		if wrap == null:
+			continue
+		var s: float = maxf(wrap.scale.x, 0.0001)
+		var r: Vector3 = d.get("rot", Vector3.ZERO)
+		wrap.basis = Basis.from_euler(Vector3(deg_to_rad(r.x), deg_to_rad(r.y), deg_to_rad(r.z))) * Basis.from_scale(Vector3.ONE * s)
+		wrap.position = d.get("pos", Vector3.ZERO)
+
+
+func set_weapon_override(id: String, pos: Vector3, rot: Vector3) -> void:
+	weapon_overrides[id] = {"pos": pos, "rot": rot}
+	_apply_weapon_overrides()
 
 
 func apply_slot_override(slot: String, key: String) -> void:
@@ -183,15 +244,26 @@ func _abort_all() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED \
 			or (showcase and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0)):
-		_yaw -= event.relative.x * mouse_sens
-		_pitch = clampf(_pitch - event.relative.y * mouse_sens, -1.2, 0.8)
+		var sens := mouse_sens * (aim_sens_mult if _is_zoomed else 1.0)
+		if _lock_active and lock_on != null and lock_on.active and lock_on.target != null and is_instance_valid(lock_on.target):
+			lock_on.add_mouse_input(event.relative.x, event.relative.y, sens)
+			# permite quebrar lock-on com movimento forte do mouse
+			if event.relative.length() > 40.0:
+				lock_on._deactivate()
+				_lock_active = false
+		else:
+			_yaw -= event.relative.x * sens
+			_pitch = clampf(_pitch - event.relative.y * sens, -1.2, 0.8)
 	elif event is InputEventMouseButton and event.pressed:
 		match event.button_index:
 			MOUSE_BUTTON_LEFT:
 				if not showcase and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 					Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			MOUSE_BUTTON_RIGHT:
-				attack_pressed()
+				if _aim_active:
+					_fire_projectile()
+				else:
+					attack_pressed()
 			MOUSE_BUTTON_MIDDLE:
 				_toggle_lock_on()
 			MOUSE_BUTTON_WHEEL_UP:
@@ -225,8 +297,6 @@ func stop_current() -> void:
 
 
 func _is_ranged_weapon() -> bool:
-	var w := String(loadout.get("weapons", [""])[0] if loadout.has("weapons") else "")
-	# active weapon from rig? use first weapon id
 	var ids: Array = loadout.get("weapons", [])
 	if ids.is_empty():
 		return false
@@ -242,20 +312,62 @@ func _toggle_aim() -> void:
 		pass
 
 func _toggle_lock_on() -> void:
-	if locked_target != null and is_instance_valid(locked_target):
-		locked_target = null
+	lock_on.toggle(cam, global_position)
+
+func _on_lock_target_changed(target: Node3D) -> void:
+	_lock_active = target != null
+	if aim_sys:
+		aim_sys.set_lock_target(target, _lock_active)
+	if target == null:
+		pass
+	else:
+		var to_t := target.global_position - (global_position + Vector3(0, cam_height, 0))
+		if to_t.length() > 0.01:
+			_yaw = atan2(-to_t.x, -to_t.z)
+			_pitch = clampf(-atan2(to_t.y, Vector2(to_t.x, to_t.z).length()), -0.6, 0.4)
+
+func _set_aim_mode(on: bool) -> void:
+	_aim_active = on
+	_is_zoomed = on
+	if aim_sys:
+		aim_sys.set_active(on)
+	if on:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		_saved_spring_length = spring.spring_length
+		if fps_mode:
+			spring.spring_length = 0.0
+			if rig and rig.model:
+				rig.model.visible = false
+		else:
+			spring.spring_length = 2.8
+			if rig and rig.model:
+				rig.model.visible = true
+	else:
+		spring.spring_length = _saved_spring_length if _saved_spring_length > 0.1 else 2.6
+		if rig and rig.model:
+			rig.model.visible = true
+	var tw := create_tween()
+	tw.tween_property(cam, "fov", aim_fov if on else normal_fov, 0.18)
+
+func _fire_projectile() -> void:
+	if spawner == null or aim_sys == null or not _aim_active:
 		return
-	# find nearest dummy in front within range
-	var best: Node3D = null
-	var best_dist := lock_on_range
-	for n in get_tree().get_nodes_in_group("dummies"):
-		if not (n is Node3D):
-			continue
-		var d := (n as Node3D).global_position.distance_to(global_position)
-		if d < best_dist:
-			best_dist = d
-			best = n as Node3D
-	locked_target = best
+	if not (loadout.get("id", "") in RANGED_LOADOUTS):
+		return
+	var w_id: String = String(loadout.get("id", ""))
+	var now := Time.get_ticks_msec() / 1000.0
+	var cd: float = float(FIRE_COOLDOWNS.get(w_id, 0.3))
+	if now - _last_fire_time < cd:
+		return
+	_last_fire_time = now
+	if not chain.is_empty():
+		trigger_clip(chain[0], "upper", "attack")
+	var delay: float = float(FIRE_DELAYS.get(w_id, 0.1))
+	await get_tree().create_timer(delay).timeout
+	if not is_inside_tree():
+		return
+	if spawner and aim_sys and rig and rig.skeleton:
+		spawner.spawn(aim_sys, rig.skeleton, w_id, cam)
 
 func attack_pressed() -> void:
 	if chain.is_empty():
@@ -278,6 +390,17 @@ func dodge_pressed() -> void:
 		return
 	if _act.get("active", false) and _act.kind in ["death", "hit"]:
 		return
+	if _lock_active and lock_on != null and lock_on.target != null:
+		# dodge lateral relativo ao alvo
+		var to_target := lock_on.target.global_position - global_position
+		to_target.y = 0.0
+		var right := to_target.cross(Vector3.UP).normalized()
+		var dir := right if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT) else -right
+		# se nenhuma tecla lateral, esquiva para trás
+		if not (Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_LEFT) or Input.is_physical_key_pressed(KEY_RIGHT)):
+			dir = -global_transform.basis.z
+		_face_yaw_override = atan2(-dir.x, -dir.z)
+		_face_until = _now() + 0.25
 	trigger_clip(roles.dodge, "full", "dodge")
 
 
@@ -334,7 +457,17 @@ func trigger_clip(key: String, mode_pref := "auto", kind := "special") -> bool:
 	if kind == "dodge" or "dodge" in key.to_lower() or "backflip" in key.to_lower() or "flip" in key.to_lower():
 		move_during = true
 		move_speed = run_speed
-		move_dir = -global_transform.basis.z
+		if _lock_active:
+			var ix := 0.0
+			if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT):
+				ix -= 1.0
+			if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT):
+				ix += 1.0
+			if ix == 0.0:
+				ix = 1.0
+			move_dir = global_transform.basis.x * sign(ix)
+		else:
+			move_dir = -global_transform.basis.z
 		rm = false
 	var seek_to := 0.0
 	if use_combo_seek and seek_cache != null and _act.get("kind") == "attack" and kind == "attack":
@@ -381,8 +514,8 @@ func _input_world_dir() -> Vector3:
 # Loop físico
 # -----------------------------------------------------------------------------
 func _physics_process(delta: float) -> void:
-	if locked_target != null and not is_instance_valid(locked_target):
-		locked_target = null
+	if _lock_active and (lock_on.target == null or not is_instance_valid(lock_on.target)):
+		_lock_active = false
 	_update_camera(delta)
 	if rig.tree == null:
 		return
@@ -446,9 +579,10 @@ func _physics_process(delta: float) -> void:
 			_end_action()
 
 	# ---- orientação ----
-	var face_cam := strafe_mode or aim_mode or Input.is_physical_key_pressed(KEY_ALT)
-	if locked_target != null and is_instance_valid(locked_target):
-		var to_t := locked_target.global_position - global_position
+	var effective_strafe := strafe_mode or _aim_active
+	var face_cam := effective_strafe or aim_mode or Input.is_physical_key_pressed(KEY_ALT)
+	if _lock_active and lock_on.target != null and is_instance_valid(lock_on.target):
+		var to_t := lock_on.target.global_position - global_position
 		to_t.y = 0.0
 		if to_t.length() > 0.01:
 			rotation.y = lerp_angle(rotation.y, atan2(-to_t.x, -to_t.z), 1.0 - exp(-14.0 * delta))
@@ -473,9 +607,19 @@ func _physics_process(delta: float) -> void:
 		if face_cam:
 			var local := global_transform.basis.inverse() * world_dir
 			var ang := rad_to_deg(atan2(-local.x, -local.z))
-			dirname = LabAnimDB.DIR_BY_IDX[clampi(int(roundf(ang / 45.0)), -4, 4)]
+			var snapped := roundf(ang / 90.0) * 90.0
+			if is_equal_approx(snapped, 0.0) or is_equal_approx(snapped, -0.0):
+				dirname = "f"
+			elif is_equal_approx(snapped, 90.0) or is_equal_approx(snapped, -270.0):
+				dirname = "r"
+			elif is_equal_approx(snapped, 180.0) or is_equal_approx(snapped, -180.0):
+				dirname = "b"
+			elif is_equal_approx(snapped, -90.0) or is_equal_approx(snapped, 270.0):
+				dirname = "l"
+			else:
+				dirname = "f"
 			var prev_idx := _dir_to_angle(cur_dir)
-			if absf(angle_difference(deg_to_rad(prev_idx), deg_to_rad(ang))) < deg_to_rad(31.0):
+			if absf(angle_difference(deg_to_rad(prev_idx), deg_to_rad(snapped))) < deg_to_rad(45.0):
 				dirname = cur_dir
 		cur_dir = dirname
 		slot = "%s_%s" % ["run" if running else "walk", dirname]
@@ -587,21 +731,22 @@ func _update_camera(delta: float) -> void:
 		spring.spring_length = lerpf(spring.spring_length, _cam_len_target, 1.0 - exp(-8.0 * delta))
 		if absf(spring.spring_length - _cam_len_target) < 0.02:
 			_cam_len_target = -1.0
-	# Distância da câmera por modo (RE over-shoulder / mira / lock-on)
-	var target_len := 2.6
-	if aim_mode:
-		target_len = 1.8
-	elif locked_target != null and is_instance_valid(locked_target):
-		target_len = 3.0
-	if _cam_len_target < 0.0:
-		spring.spring_length = lerpf(spring.spring_length, target_len, 1.0 - exp(-8.0 * delta))
-	# Lock-on: aponta a câmera para o alvo
-	if locked_target != null and is_instance_valid(locked_target):
-		var to_t := locked_target.global_position - (global_position + Vector3(0, cam_height, 0))
-		_yaw = atan2(-to_t.x, -to_t.z)
-		_pitch = clampf(-atan2(to_t.y, Vector2(to_t.x, to_t.z).length()), -0.6, 0.4)
-	cam_pivot.global_position = cam_pivot.global_position.lerp(global_position + Vector3(0, cam_height, 0), 1.0 - exp(-16.0 * delta))
-	cam_pivot.rotation = Vector3(_pitch, _yaw, 0)
+	# Offset lateral over-the-shoulder quando em mira
+	var target_offset := Vector3.ZERO
+	if _aim_active and not fps_mode:
+		target_offset = aim_shoulder_offset
+	_current_cam_offset = _current_cam_offset.lerp(target_offset, 1.0 - exp(-8.0 * delta))
+	var offset_world := Basis(Vector3.UP, _yaw) * _current_cam_offset
+	var target_pos := global_position + Vector3(0, cam_height, 0) + offset_world
+	cam_pivot.global_position = cam_pivot.global_position.lerp(target_pos, 1.0 - exp(-16.0 * delta))
+	if _lock_active and lock_on != null and lock_on.active and lock_on.target != null and is_instance_valid(lock_on.target):
+		lock_on.update(delta, cam_pivot, spring, global_position)
+		_yaw = cam_pivot.rotation.y
+		_pitch = cam_pivot.rotation.x
+	else:
+		if _lock_active and lock_on != null and (lock_on.target == null or not is_instance_valid(lock_on.target) or not lock_on.active):
+			_lock_active = false
+		cam_pivot.rotation = Vector3(_pitch, _yaw, 0)
 
 
 # -----------------------------------------------------------------------------
@@ -619,4 +764,16 @@ func debug_text() -> String:
 	lines.append("Velocidade: %.1f m/s   Combo: golpe %d/%d" % [cur_speed, combo_idx + 1, chain.size()])
 	if _act.get("seek_offset", 0.0) > 0.0:
 		lines.append("Seek: +%.2fs no combo  |  offset ativo: %s" % [_act.seek_offset, "sim" if pose_offset and pose_offset.active else "não"])
+	if _aim_active and aim_sys:
+		var dist := (aim_sys.aim_point - global_position).length()
+		var w_id: String = String(loadout.get("id", ""))
+		var now := Time.get_ticks_msec() / 1000.0
+		var cd: float = float(FIRE_COOLDOWNS.get(w_id, 0.3))
+		var cd_left: float = maxf(0.0, cd - (now - _last_fire_time))
+		if fps_mode:
+			lines.append("Mira FPS: %.1fm | alvo=%s" % [dist, "sim" if aim_sys._hit_target else "não"])
+		else:
+			lines.append("Mira: %.1fm | alvo=%s | cooldown=%.1fs | fps=não" % [dist, "sim" if aim_sys._hit_target else "não", cd_left])
+	if weapon_debug != null and weapon_debug.enabled:
+		lines.append(weapon_debug.status_text())
 	return "\n".join(lines)
