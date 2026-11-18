@@ -6,20 +6,18 @@ extends RefCounted
 ## Cada loadout diz: quais pacotes de animação ele usa (regex sobre "pack/clip"
 ## em minúsculas), a cadeia de combo do botão direito, os "especiais" que
 ## preenchem as teclas 1-8 por padrão, e quais armas aparecem nas mãos.
-## A locomoção (idle, andar/correr em 8 direções) é resolvida SOZINHA pelos
-## metadados do LabAnimDB; tudo pode ser trocado pelos dropdowns do menu.
+## A locomoção usa só 4 direções (frente/trás/esquerda/direita); diagonais
+## são resolvidas para a direção cardinal mais próxima. A locomoção (idle,
+## andar/correr) é resolvida SOZINHA pelos metadados do LabAnimDB; tudo pode ser
+## trocado pelos dropdowns do menu.
 ## =============================================================================
 
-const DIRS := ["f", "fl", "l", "bl", "b", "br", "r", "fr"]
+const DIRS := ["f", "l", "b", "r"]
 const DIR_FALLBACK := {
 	"f": [["f", false]],
-	"fl": [["fl", false], ["f", false], ["l", false]],
-	"fr": [["fr", false], ["f", false], ["r", false]],
-	"l": [["l", false], ["fl", false], ["bl", false], ["f", false]],
-	"r": [["r", false], ["fr", false], ["br", false], ["f", false]],
+	"l": [["l", false], ["f", false]],
+	"r": [["r", false], ["f", false]],
 	"b": [["b", false], ["f", true]],
-	"bl": [["bl", false], ["b", false], ["l", false], ["f", true]],
-	"br": [["br", false], ["b", false], ["r", false], ["f", true]],
 }
 const CLASS_TARGET := {"walk": 1.8, "run": 4.0, "sprint": 7.0}
 
@@ -34,8 +32,8 @@ static var WEAPONS := {
 	"dagger":     {"file": "res://weapons/adaga.fbx",         "hand": "R", "scale": 0.30, "pos": Vector3(0, 0.08, 0), "rot": Vector3(0, 0, -90)},
 	"shield":     {"file": "res://weapons/escudo.fbx",        "hand": "L", "scale": 0.50, "pos": Vector3(0, 0.08, 0), "rot": Vector3(0, 0, 0)},
 	"bow":        {"file": "res://weapons/arco.fbx",          "hand": "L", "scale": 0.50, "pos": Vector3(0, 0.0, 0), "rot": Vector3(0, 0, 0)},
-	"pistol":     {"file": "res://weapons/Pistola.fbx",       "hand": "R", "scale": 0.03, "pos": Vector3(0, 0.05, -0.02), "rot": Vector3(-90, 0, 0), "recenter": false},
-	"rifle":      {"file": "res://weapons/Rifle.fbx",         "hand": "R", "scale": 0.10, "pos": Vector3(0, 0.08, -0.05), "rot": Vector3(-90, 0, 0), "recenter": false},
+	"pistol":     {"file": "res://weapons/Pistola.fbx",       "hand": "R", "scale": 0.03, "pos": Vector3(0, 0.05, -0.02), "rot": Vector3(11.8, -3.3, -75.8), "recenter": false},
+	"rifle":      {"file": "res://weapons/Rifle.fbx",         "hand": "R", "scale": 0.10, "pos": Vector3(0, 0.08, -0.05), "rot": Vector3(71.8, 118.6, 35.3), "recenter": false},
 }
 
 const GS := "Pro Sword and Shield Pack/"
@@ -132,7 +130,7 @@ static func candidates(db: LabAnimDB, lo: Dictionary, female: bool) -> Array:
 	return out
 
 
-## Resolve idle + 16 slots de locomoção.
+## Resolve idle + 8 slots de locomoção (4 direções × andar/correr).
 ## retorno: { slot: {"key","rev","scale","speed"} }  (speed = m/s que o corpo anda)
 static func resolve_slots(db: LabAnimDB, lo: Dictionary, female: bool, overrides: Dictionary) -> Dictionary:
 	var cands := candidates(db, lo, female)

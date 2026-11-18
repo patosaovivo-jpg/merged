@@ -54,7 +54,7 @@ func build(p_db: LabAnimDB, p_player: LabPlayer, chars: Array) -> void:
 
 	help = Label.new()
 	help.position = Vector2(14, 10)
-	help.text = "WASD mover  |  Shift correr  |  Espaço pular  |  Q rolamento  |  F bloquear (segurar)\n1-8 animações configuráveis  |  Botão direito: ataque / combo  |  Alt: mirar p/ câmera\nClique esquerdo na cena: capturar mouse (câmera)  |  Esc: liberar mouse p/ usar o menu  |  R: parar ação\nF9: calibrar arma na mão (numpad ajusta pos/rot; 0 imprime no console)"
+	help.text = "WASD mover  |  Shift correr  |  Espaço pular  |  Q rolamento  |  F bloquear (segurar)\n1-8 animações configuráveis  |  Botão direito: ataque / combo  |  Alt: mirar p/ câmera\nClique esquerdo na cena: capturar mouse (câmera)  |  Esc: liberar mouse p/ usar o menu  |  R: parar ação\nF9: calibrar arma na mão — I/K Y · J/L X · U/O Z  |  T/G rx · V/M ry · B/N rz\nShift = passo grande · 0 copia o código · Home restaura · F9 fecha"
 	_style_label(help)
 	add_child(help)
 
@@ -241,6 +241,12 @@ func _build_tab_equip() -> void:
 	_noclip_focus(eq)
 	eq.pressed.connect(func(): player.equip_loadout(player.loadout.id))
 	vb.add_child(eq)
+	var cal := Button.new()
+	cal.text = "Calibrar arma na mão (F9)"
+	cal.clip_text = true
+	_noclip_focus(cal)
+	cal.pressed.connect(func(): if player.weapon_debug != null: player.weapon_debug.toggle())
+	vb.add_child(cal)
 	_lo_status = _label(vb, "")
 
 	vb.add_child(HSeparator.new())
@@ -261,7 +267,7 @@ func _build_tab_equip() -> void:
 
 	vb.add_child(HSeparator.new())
 	_label(vb, "Movimento", true)
-	_chk["strafe"] = _check(vb, "Strafe (corpo mira p/ câmera, 8 direções)", player.strafe_mode, func(v): player.strafe_mode = v)
+	_chk["strafe"] = _check(vb, "Strafe (corpo mira p/ câmera, 4 direções)", player.strafe_mode, func(v): player.strafe_mode = v)
 	_chk["sync"] = _check(vb, "Sincronizar velocidade com a animação (sem pé deslizando)", player.sync_speed, func(v): player.sync_speed = v; config_changed.emit())
 	_chk["rm"] = _check(vb, "Root motion nos golpes de corpo todo", player.use_root_motion, func(v): player.use_root_motion = v; config_changed.emit())
 	_slider(vb, "Vel. andar (sync off)", 0.5, 5.0, 0.1, player.walk_speed, func(v): player.walk_speed = v)

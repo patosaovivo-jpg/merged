@@ -3,7 +3,7 @@
 ## Recado para o Claude (orquestrador)
 > **Não reanalise o diretório inteiro.** Este README + os arquivos listados abaixo são a fonte de verdade do estado atual. Foque apenas neles ao sugerir mudanças.
 
-### Estado atual (atualizado em 2026-11-13)
+### Estado atual (atualizado em 2026-11-17)
 - Projeto Godot 4.7.2 em `C:\0-BASE` (raiz: `project.godot`, `lab/`, `characters/`, `weapons/`, `ANIMATIONS/`).
 - Git: `main`. Import headless OK; cena `res://lab/anim_lab.tscn` roda sem SCRIPT ERROR.
 - Lab funcional: arena de animações (corpo dividido, combos, root motion), criador de personagem, loadouts, HUD de debug, mira TPS, projéteis procedurais e lock-on.
@@ -14,15 +14,17 @@
 3. **Dodge/backflip** com deslocamento na velocidade de corrida (+ dodge lateral com lock-on).
 4. **Câmera TPS over-the-shoulder** (`aim_shoulder_offset`, modo FPS opcional em `fps_mode`).
 5. **Mira** (`lab/aim_system.gd`): crosshair procedural desenhado por `_draw()` no centro exato da tela; ray a partir do centro da viewport, com o RID do jogador excluído do raycast; ray aponta para o alvo em lock-on.
-6. **Projéteis** (`lab/projectile.gd`, `lab/projectile_spawner.gd`): nascem na mão, mas a direção de voo segue o ray da câmera (centro da tela) — trajetória estável mesmo com a mão se movendo; em lock-on convergem para o alvo. Impacto com partículas, anel, decal procedural e flash de luz. Cooldown e delay de spawn por arma.
+6. **Projéteis** (`lab/projectile.gd`, `lab/projectile_spawner.gd`): nascem na mão e a trajetória **converge para o `aim_point`** (o ponto sob o crosshair) — o tiro chega exatamente na mira mesmo com a mão se movendo; em lock-on convergem para o alvo. Pistola/rifle/arco com spread 0 (tiros repetidos caem no mesmo ponto); arco recebe compensação balística de gravidade. Impacto com partículas, anel, decal procedural e flash de luz. Cooldown e delay de spawn por arma.
 7. **Lock-on estilo Dark Souls** (`lab/lock_on.gd`): botão do meio alterna; indicador 3D procedural (anel + marca). Movimento forte do mouse quebra o lock.
-8. **Calibração de armas na mão** (`lab/weapon_debug.gd`): F9 liga o modo; numpad ajusta pos/rot da arma atual; KP_0 imprime os valores; overrides persistidos em `weapon_overrides` no config.
+8. **Calibração de armas na mão** (`lab/weapon_debug.gd`): F9 liga um overlay grande com pos/rot da arma atual. Posição I/K (Y), J/L (X), U/O (Z); rotação T/G (rx), V/M (ry), B/N (rz); Shift = passo grande; 0 copia o código pronto para a área de transferência; Home restaura; ajustes salvos automaticamente em `weapon_overrides` no config.
+9. **Locomoção em 4 direções** (`lab/loadouts.gd`): frente/trás/esquerda/direita; diagonais resolvem para a cardinal mais próxima. Slots `walk_f/l/b/r` e `run_f/l/b/r`.
+10. **Pistola e rifle alinhados ao cano real** (`lab/loadouts.gd`): pistola usa os ossos internos `Slide/Slide_end`; rifle usa o eixo longo da malha. Ambos apontam para o centro da mira e ficam em pé na pose de idle das armas.
 
 ### Controles principais
 - WASD mover | Shift correr | Espaço pular | Q rolamento | F bloquear (segurar)
 - Botão direito: ataque (melee) ou disparo (armas de distância)
 - Botão do meio: lock-on | Esc: libera o mouse | Clique esquerdo na cena: captura o mouse
-- F9: calibração de arma (numpad 8/2/4/6 pos, PgUp/PgDn pos.z, 7/9 rot.z, 1/3 rot.x, +/- rot.y, 0 imprime)
+- F9: calibração de arma (I/K Y, J/L X, U/O Z; T/G rx, V/M ry, B/N rz; Shift passo grande; 0 copia; Home restaura)
 
 ### Arquivos-chave (leia estes)
 - `lab/lab_player.gd` — player, física, combos, câmera, mira, disparo, lock-on.

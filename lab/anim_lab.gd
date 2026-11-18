@@ -71,6 +71,8 @@ func _start() -> void:
 	player.db = db
 	add_child(player)
 	player.global_position = Vector3(0, 0.05, 0)
+	if player.weapon_debug != null:
+		player.weapon_debug.changed.connect(_queue_save)
 	ui = LabUI.new()
 	add_child(ui)
 	var cfg := _load_cfg()

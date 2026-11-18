@@ -1,24 +1,24 @@
 class_name LabProjectileSpawner
 extends Node3D
-## Instancia projéteis a partir da mão, mas com a direção de voo estabilizada no
-## ray da câmera (centro da tela). Assim o projétil sempre segue a mira, mesmo
-## com a mão/animação se movendo.
+## Instancia projéteis a partir da mão, mas faz a trajetória CONVERGIR para o
+## ponto de mira (o ponto sob o crosshair). O projétil sai da arma e chega
+## exatamente onde a mira está, mesmo que a mão se mova com a animação.
 
 const PROJECTILE_CFG := {
     "pistol": {
         "kind": 0, "speed": 45.0, "gravity": 0.0,
         "damage": 1, "trail": Color(1.0, 0.95, 0.5), "impact": Color(1.0, 0.7, 0.2),
-        "burst": 1, "spread_deg": 1.0, "recoil": 0.35,
+        "burst": 1, "spread_deg": 0.0, "recoil": 0.35,
     },
     "rifle": {
         "kind": 0, "speed": 65.0, "gravity": 0.0,
         "damage": 2, "trail": Color(0.8, 1.0, 0.5), "impact": Color(0.6, 1.0, 0.3),
-        "burst": 1, "spread_deg": 0.4, "recoil": 0.25,
+        "burst": 1, "spread_deg": 0.0, "recoil": 0.25,
     },
     "bow": {
         "kind": 1, "speed": 28.0, "gravity": 0.55,
         "damage": 2, "trail": Color(0.7, 0.55, 0.3), "impact": Color(0.9, 0.6, 0.2),
-        "burst": 1, "spread_deg": 1.5, "recoil": 0.5,
+        "burst": 1, "spread_deg": 0.0, "recoil": 0.5,
     },
     "magic": {
         "kind": 2, "speed": 18.0, "gravity": 0.0,
@@ -52,38 +52,63 @@ func spawn(aim_sys: LabAimSystem, sk: Skeleton3D, w_id: String, p_camera: Camera
 
 
 func _muzzle_position() -> Vector3:
+    var fallback := global_position + Vector3(0, 1.2, 0)
     if skeleton == null:
-        return global_position
+        return fallback
     var hand_i := skeleton.find_bone("mixamorig_RightHand")
     if hand_i < 0:
-        return global_position
-    return skeleton.global_transform * skeleton.get_bone_global_pose(hand_i).origin
+        return fallback
+    var p := skeleton.global_transform * skeleton.get_bone_global_pose(hand_i).origin
+    # Antes do AnimationTree aplicar a pose, o osso fica na origem/T-pose.
+    if p.y < skeleton.global_position.y + 0.5:
+        return fallback
+    return p
 
 
 func _fire_one(origin: Vector3, cfg: Dictionary, idx: int) -> void:
-    # Direção de voo = ray da câmera pelo centro da tela (ou alvo travado).
+    # 1) A direção base converge para o ponto que está sob o crosshair.
+    #    Assim o tiro sai da mão, mas CHEGA exatamente na mira.
+    var aim_valid := aim != null and aim.aim_point != Vector3.ZERO \
+            and origin.distance_to(aim.aim_point) > 1.0
     var base_dir := Vector3.FORWARD
-    if aim and aim.lock_active and aim.lock_target != null and is_instance_valid(aim.lock_target):
-        var to_target := aim.aim_point - origin
-        if to_target.length() > 0.01:
-            base_dir = to_target.normalized()
-    elif camera != null:
-        var center := camera.get_viewport().get_visible_rect().get_center()
-        base_dir = camera.project_ray_normal(center).normalized()
-    elif aim:
+    var converges := false
+    if aim_valid:
         var to_point := aim.aim_point - origin
         if to_point.length() > 0.01:
             base_dir = to_point.normalized()
+            converges = true
+    if not converges:
+        # Fallback: direção do ray da câmera (mira ainda não atualizada etc.).
+        if camera != null:
+            var center := camera.get_viewport().get_visible_rect().get_center()
+            base_dir = camera.project_ray_normal(center).normalized()
+        elif aim:
+            var to_point := aim.aim_point - origin
+            if to_point.length() > 0.01:
+                base_dir = to_point.normalized()
     if base_dir.length() < 0.01:
         base_dir = Vector3.FORWARD
 
-    var spread := deg_to_rad(float(cfg.get("spread_deg", 2.0)))
-    var rng := RandomNumberGenerator.new()
-    rng.randomize()
-    var yaw := rng.randf_range(-spread, spread)
-    var pitch := rng.randf_range(-spread, spread)
-    var dir := (Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch)) * base_dir
-    dir = dir.normalized()
+    var spread := deg_to_rad(float(cfg.get("spread_deg", 0.0)))
+    var dir := base_dir
+    if spread > 0.0001:
+        var rng := RandomNumberGenerator.new()
+        rng.randomize()
+        var yaw := rng.randf_range(-spread, spread)
+        var pitch := rng.randf_range(-spread, spread)
+        dir = (Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch)) * base_dir
+        dir = dir.normalized()
+
+    # 2) Arco/magia com gravidade: eleva a saída para compensar a queda e
+    #    ainda acertar o ponto de mira (balística simples).
+    var gravity_scale := float(cfg.get("gravity", 0.0))
+    if converges and gravity_scale > 0.0:
+        var dist := origin.distance_to(aim.aim_point)
+        var spd := maxf(float(cfg.get("speed", 30.0)), 0.1)
+        var theta := atan(0.5 * 9.8 * gravity_scale * dist / (spd * spd))
+        var axis := dir.cross(Vector3.UP)
+        if axis.length_squared() > 0.0001:
+            dir = dir.rotated(axis.normalized(), theta).normalized()
 
     var proj := LabProjectile.new()
     get_tree().root.add_child(proj)

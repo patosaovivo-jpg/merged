@@ -775,5 +775,5 @@ func debug_text() -> String:
 		else:
 			lines.append("Mira: %.1fm | alvo=%s | cooldown=%.1fs | fps=não" % [dist, "sim" if aim_sys._hit_target else "não", cd_left])
 	if weapon_debug != null and weapon_debug.enabled:
-		lines.append(weapon_debug.status_text())
+		lines.append(weapon_debug.status_short())
 	return "\n".join(lines)
