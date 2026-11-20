@@ -3,12 +3,14 @@ extends RefCounted
 ## =============================================================================
 ## BANCO DE ANIMAÇÕES
 ## -----------------------------------------------------------------------------
-## Varre res://ANIMATIONS (recursivo), carrega cada FBX/GLB/.scn/.tres do Mixamo e
+## Varre res://animations (recursivo), carrega cada FBX/GLB/.scn/.tres do Mixamo e
 ## classifica cada clipe sozinho:
 ##   - categoria (idle, locomoção, ataque, bloqueio, pulo, rolamento, dano...)
-##   - direção (f, fl, l, bl, b, br, r, fr) e velocidade real pelo deslocamento
-##     do quadril (assim "great sword run" que na verdade corre de costas é
-##     detectado corretamente e o corpo anda sem deslizar o pé)
+##   - direção (f, l, b, r): clipes diagonais são encaixados na cardinal mais
+##     próxima e marcados como "exact_dir = false" (preferimos os cardinais)
+##   - velocidade real pelo deslocamento do quadril (assim "great sword run" que
+##     na verdade corre de costas é detectado corretamente e o corpo anda sem
+##     deslizar o pé)
 ##   - se o clipe deve tocar no corpo inteiro ou só na parte de cima
 ## O X/Z do quadril é travado nos clipes (o corpo é movido por código); a curva
 ## original fica guardada em meta ("root_t"/"root_xz") p/ aplicar root motion
@@ -24,10 +26,10 @@ const CAT_LABEL := {
 	Cat.DEATH: "morte", Cat.EQUIP: "equipar", Cat.EMOTE: "emote", Cat.TURN: "giro",
 }
 
-const DEFAULT_ROOTS := ["res://ANIMATIONS"]
+const DEFAULT_ROOTS := ["res://animations"]
 const EXTS := ["fbx", "glb", "gltf", "dae", "scn", "tscn", "res", "tres"]
-const CACHE_PATH := "user://lab_anim_cache_v2.res"
-const DIR_BY_IDX := {0: "f", 1: "fl", 2: "l", 3: "bl", 4: "b", -1: "fr", -2: "r", -3: "br", -4: "b"}
+const CACHE_PATH := "user://lab_anim_cache_v3.res"
+const DIR_BY_IDX := {0: "f", 1: "l", 2: "b", -1: "r", -2: "b"}
 
 var entries: Dictionary = {}   # key ("Pack/clip") -> info (Dictionary)
 var anims: Dictionary = {}     # key -> Animation (já processada)
@@ -270,10 +272,13 @@ func _classify(pack: String, clip: String, anim: Animation) -> Dictionary:
 	var dir := "f"
 	var sclass := ""
 	var speed := 0.0
+	var exact_dir := true
 	if cat == Cat.LOCO:
 		speed = hs
 		var ang := rad_to_deg(atan2(disp.x, disp.z))   # +x = esquerda do personagem, +z = frente
-		dir = DIR_BY_IDX[clampi(int(roundf(ang / 45.0)), -4, 4)]
+		var idx8 := int(roundf(ang / 45.0))
+		exact_dir = (idx8 % 2) == 0                    # cardinais exatos (sem diagonal)
+		dir = DIR_BY_IDX[clampi(int(roundf(ang / 90.0)), -2, 2)]
 		if n.contains("sprint"):
 			sclass = "sprint"
 		elif n.contains("run") or n.contains("jog"):
@@ -292,6 +297,7 @@ func _classify(pack: String, clip: String, anim: Animation) -> Dictionary:
 
 	inf["cat"] = cat
 	inf["dir"] = dir
+	inf["exact_dir"] = exact_dir
 	inf["sclass"] = sclass
 	inf["speed"] = speed
 	inf["disp"] = disp

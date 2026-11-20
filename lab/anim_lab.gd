@@ -5,7 +5,7 @@ extends Node3D
 ## =============================================================================
 
 const CFG_PATH := "user://anim_lab_config.cfg"
-const ANIM_ROOTS := ["res://ANIMATIONS"]
+const ANIM_ROOTS := ["res://animations"]
 const CHARACTER_DIRS := ["res://characters"]
 
 var db := LabAnimDB.new()
@@ -55,7 +55,7 @@ func _start() -> void:
 	if db.entries.is_empty():
 		loading = Label.new()
 		var l := Label.new()
-		l.text = "Nenhuma animação encontrada em res://ANIMATIONS.\nCopie as pastas de FBX do Mixamo (Great Sword Pack, Rifle 8-Way..., etc.) para lá e rode de novo."
+		l.text = "Nenhuma animação encontrada em res://animations.\nCopie as pastas de FBX do Mixamo (Pro guns pack, Pro Longbow Pack, etc.) para lá e rode de novo."
 		l.position = Vector2(30, 30)
 		l.add_theme_font_size_override("font_size", 22)
 		var cl := CanvasLayer.new()

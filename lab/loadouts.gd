@@ -84,11 +84,11 @@ static func all() -> Array:
 			"chain": ["Pro Longbow Pack/standing draw arrow"],
 			"specials": ["Pro Longbow Pack/standing equip bow", "Pro Longbow Pack/standing disarm bow", "Pro Longbow Pack/standing draw arrow"],
 			"jump": LM + "Standing Jump", "hit": LM + "Standing React Small From Front", "death": LM + "Standing React Death Backward", "equip": LB + "standing equip bow"},
-		{"id": "pistol", "name": "Pistola", "include": "^pro guns pack", "weapons": ["pistol"], "strafe": true,
+		{"id": "pistol", "name": "Pistola", "include": "^pro guns pack/pistol", "weapons": ["pistol"], "strafe": true,
 			"chain": ["Pro guns pack/firing rifle"],
 			"specials": [PI + "pistol stand to kneel", PI + "pistol kneel to stand", PI + "pistol kneeling idle", PI + "pistol jump (2)", R8 + "death from front headshot"],
-			"jump": PI + "pistol jump", "hit": R8 + "death from front headshot"},
-		{"id": "rifle", "name": "Rifle", "include": "^pro guns pack", "weapons": ["rifle"], "strafe": true,
+			"jump": PI + "pistol jump", "hit": R8 + "death from front headshot", "death": R8 + "death from front headshot"},
+		{"id": "rifle", "name": "Rifle", "include": "^pro guns pack", "exclude": "pistol", "weapons": ["rifle"], "strafe": true,
 			"chain": ["Pro guns pack/firing rifle"],
 			"specials": [SH + "rifle aiming idle", R8 + "idle crouching aiming", R8 + "turn 90 left", R8 + "turn 90 right", R8 + "death from front headshot", R8 + "death from back headshot", SH + "jump forward", SH + "jump backward"],
 			"jump": SH + "jump forward", "death": R8 + "death from front headshot"},
@@ -123,10 +123,18 @@ static func _regex(pattern: String) -> RegEx:
 static func candidates(db: LabAnimDB, lo: Dictionary, female: bool) -> Array:
 	var pat: String = lo.get("include_f", lo.include) if female else lo.include
 	var re := _regex(pat)
+	var ex: RegEx = null
+	var pat_ex := String(lo.get("exclude", ""))
+	if pat_ex != "":
+		ex = _regex(pat_ex)
 	var out: Array = []
 	for key in db.entries:
-		if re.search(String(key).to_lower()) != null:
-			out.append(db.entries[key])
+		var low := String(key).to_lower()
+		if re.search(low) == null:
+			continue
+		if ex != null and ex.search(low) != null:
+			continue
+		out.append(db.entries[key])
 	return out
 
 
@@ -165,6 +173,9 @@ static func resolve_slots(db: LabAnimDB, lo: Dictionary, female: bool, overrides
 			continue
 		var k := "%s|%s" % [inf.sclass, inf.dir]
 		var score := absf(inf.speed - CLASS_TARGET[inf.sclass])
+		# Prefere clipes que andam reto na cardinal (sem diagonal).
+		if not inf.get("exact_dir", true):
+			score += 0.35
 		if not best.has(k):
 			best[k] = {"inf": inf, "score": score, "fast": inf}
 		else:

@@ -446,7 +446,7 @@ func _build_tab_combo() -> void:
 func _build_tab_loco() -> void:
 	var vb := _tab("Locomoção")
 	_label(vb, "Slots de locomoção (resolvidos sozinhos; troque se quiser)", true)
-	var nice := {"f": "frente", "fl": "frente-esq", "l": "esquerda", "bl": "trás-esq", "b": "trás", "br": "trás-dir", "r": "direita", "fr": "frente-dir"}
+	var nice := {"f": "frente", "l": "esquerda", "b": "trás", "r": "direita"}
 	for s in LabLoadouts.slot_names():
 		var row := HBoxContainer.new()
 		var kl := Label.new()
