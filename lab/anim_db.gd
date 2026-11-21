@@ -28,7 +28,7 @@ const CAT_LABEL := {
 
 const DEFAULT_ROOTS := ["res://animations"]
 const EXTS := ["fbx", "glb", "gltf", "dae", "scn", "tscn", "res", "tres"]
-const CACHE_PATH := "user://lab_anim_cache_v3.res"
+const CACHE_PATH := "user://lab_anim_cache_v4.res"
 const DIR_BY_IDX := {0: "f", 1: "l", 2: "b", -1: "r", -2: "b"}
 
 var entries: Dictionary = {}   # key ("Pack/clip") -> info (Dictionary)
@@ -242,6 +242,7 @@ func _classify(pack: String, clip: String, anim: Animation) -> Dictionary:
 
 	# --- categoria por nome ---
 	var cat := Cat.OTHER
+	var inplace_speed := 0.0
 	if n.contains("death") or n.contains("dying"):
 		cat = Cat.DEATH
 	elif n.contains("impact") or n.contains("react"):
@@ -263,10 +264,16 @@ func _classify(pack: String, clip: String, anim: Animation) -> Dictionary:
 	elif n.contains("idle"):
 		cat = Cat.IDLE
 	elif _has_any(n, ["attack", "slash", "combo", "melee", "cast", "spell", "magic", "kick", "spin", "firing",
-			"shoot", "swing", "stab", "punch", "slide", "arrow"]):
+			"shoot", "shot", "swing", "stab", "punch", "slide", "arrow"]):
 		cat = Cat.ATTACK
 	elif hs >= 0.9 and anim.length <= 2.5 and absf(disp.y) < 0.25:
 		cat = Cat.LOCO
+	elif _has_any(n, ["run", "walk", "jog"]) \
+			and not _has_any(n, ["idle", "crouch", "aim", "strafe", "turn", "start", "stop", "jump",
+				"attack", "backward", "left", "right", "arc", "curve", "circle"]):
+		# Clipes "in place" (sem deslocamento no quadril), ex.: Pistol Run.
+		cat = Cat.LOCO
+		inplace_speed = 4.0 if (n.contains("run") or n.contains("jog")) else 1.8
 
 	# --- direção / classe de velocidade (só locomoção) ---
 	var dir := "f"
@@ -274,11 +281,12 @@ func _classify(pack: String, clip: String, anim: Animation) -> Dictionary:
 	var speed := 0.0
 	var exact_dir := true
 	if cat == Cat.LOCO:
-		speed = hs
-		var ang := rad_to_deg(atan2(disp.x, disp.z))   # +x = esquerda do personagem, +z = frente
-		var idx8 := int(roundf(ang / 45.0))
-		exact_dir = (idx8 % 2) == 0                    # cardinais exatos (sem diagonal)
-		dir = DIR_BY_IDX[clampi(int(roundf(ang / 90.0)), -2, 2)]
+		speed = hs if hs >= 0.1 else inplace_speed
+		if hs >= 0.1:
+			var ang := rad_to_deg(atan2(disp.x, disp.z))   # +x = esquerda do personagem, +z = frente
+			var idx8 := int(roundf(ang / 45.0))
+			exact_dir = (idx8 % 2) == 0                # cardinais exatos (sem diagonal)
+			dir = DIR_BY_IDX[clampi(int(roundf(ang / 90.0)), -2, 2)]
 		if n.contains("sprint"):
 			sclass = "sprint"
 		elif n.contains("run") or n.contains("jog"):
@@ -359,7 +367,7 @@ func _fingerprint(files: Array) -> String:
 	var s := ""
 	for f in files:
 		s += String(f) + "|" + str(FileAccess.get_modified_time(String(f))) + ";"
-	return "%d:%d:v2" % [files.size(), s.hash()]
+	return "%d:%d:v4" % [files.size(), s.hash()]
 
 
 func _try_load_cache(fp: String) -> bool:

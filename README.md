@@ -7,6 +7,7 @@
 - Projeto Godot 4.7.2 em `C:\0-BASE` (raiz: `project.godot`, `lab/`, `characters/`, `weapons/`, `animations/`).
 - Git: `main`. Import headless OK; cena `res://lab/anim_lab.tscn` roda sem SCRIPT ERROR.
 - Lab funcional: arena de animações (corpo dividido, combos, root motion), criador de personagem, loadouts, HUD de debug, mira TPS, projéteis procedurais e lock-on.
+- Cache do banco em `user://lab_anim_cache_v4.res`; ele se reconstrói quando a lista/mtime dos FBXs muda.
 
 ### Implementações recentes
 1. **Seek automático + pose offset nos combos** (`lab/combo_seek.gd`, `lab/pose_offset.gd`).
@@ -17,9 +18,9 @@
 6. **Projéteis** (`lab/projectile.gd`, `lab/projectile_spawner.gd`): nascem na mão e a trajetória **converge para o `aim_point`** (o ponto sob o crosshair) — o tiro chega exatamente na mira mesmo com a mão se movendo; em lock-on convergem para o alvo. Pistola/rifle/arco com spread 0 (tiros repetidos caem no mesmo ponto); arco recebe compensação balística de gravidade. Impacto com partículas, anel, decal procedural e flash de luz. Cooldown e delay de spawn por arma.
 7. **Lock-on estilo Dark Souls** (`lab/lock_on.gd`): botão do meio alterna; indicador 3D procedural (anel + marca). Movimento forte do mouse quebra o lock.
 8. **Calibração de armas na mão** (`lab/weapon_debug.gd`): F9 liga um overlay grande com pos/rot da arma atual. Posição I/K (Y), J/L (X), U/O (Z); rotação T/G (rx), V/M (ry), B/N (rz); Shift = passo grande; 0 copia o código pronto para a área de transferência; Home restaura; ajustes salvos automaticamente em `weapon_overrides` no config.
-9. **Locomoção em 4 direções** (`lab/loadouts.gd`, `lab/anim_db.gd`): frente/trás/esquerda/direita. O banco classifica os clipes só nas 4 cardinais (diagonais são encaixadas na mais próxima, com preferência para clipes retos). Slots `walk_f/l/b/r` e `run_f/l/b/r`.
+9. **Locomoção em 4 direções** (`lab/loadouts.gd`, `lab/anim_db.gd`): frente/trás/esquerda/direita. O banco classifica os clipes só nas 4 cardinais; clipes diagonais (`exact_dir = false`) são **descartados** na resolução dos slots. Se faltar um cardinal para a classe, o fallback usa outra cardinal (inclusive invertida) — nunca toca diagonal. Também evita clipes `arc`/`curve` (andam em curva). Slots `walk_f/l/b/r` e `run_f/l/b/r`.
 10. **Pistola e rifle alinhados ao cano real** (`lab/loadouts.gd`): pistola usa os ossos internos `Slide/Slide_end`; rifle usa o eixo longo da malha. Ambos apontam para o centro da mira e ficam em pé na pose de idle das armas.
-11. **Pistola com animações próprias** (`lab/loadouts.gd`): o loadout `pistol` usa só clipes `pistol *` do pacote de armas (idle, walk, walk backward, strafe, run, run backward, jump, crouch); o rifle exclui esses clipes e usa os genéricos/`rifle *`.
+11. **Pistola com animações próprias** (`lab/loadouts.gd`): o loadout `pistol` usa os clipes `pistol *` do pacote de armas **e** os clipes da raiz `animations/Pistol *` (idle, run, shooting, super shot). O `Pistol Run` é in-place e recebe velocidade nominal de 4 m/s. O botão direito dispara `animations/Pistol Shooting`; `animations/Pistol Super Shot` fica num dos especiais (teclas 1-8). O rifle exclui todos os clipes `pistol *` e usa os genéricos/`rifle *`.
 
 ### Controles principais
 - WASD mover | Shift correr | Espaço pular | Q rolamento | F bloquear (segurar)

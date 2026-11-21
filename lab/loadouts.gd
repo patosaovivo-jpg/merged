@@ -84,9 +84,10 @@ static func all() -> Array:
 			"chain": ["Pro Longbow Pack/standing draw arrow"],
 			"specials": ["Pro Longbow Pack/standing equip bow", "Pro Longbow Pack/standing disarm bow", "Pro Longbow Pack/standing draw arrow"],
 			"jump": LM + "Standing Jump", "hit": LM + "Standing React Small From Front", "death": LM + "Standing React Death Backward", "equip": LB + "standing equip bow"},
-		{"id": "pistol", "name": "Pistola", "include": "^pro guns pack/pistol", "weapons": ["pistol"], "strafe": true,
-			"chain": ["Pro guns pack/firing rifle"],
-			"specials": [PI + "pistol stand to kneel", PI + "pistol kneel to stand", PI + "pistol kneeling idle", PI + "pistol jump (2)", R8 + "death from front headshot"],
+		{"id": "pistol", "name": "Pistola", "include": "^(pro guns pack/pistol|animations/pistol)", "weapons": ["pistol"], "strafe": true,
+			"idle": "animations/Pistol Idle",
+			"chain": ["animations/Pistol Shooting", "animations/Pistol Super Shot"],
+			"specials": [PI + "pistol stand to kneel", PI + "pistol kneel to stand", PI + "pistol kneeling idle", PI + "pistol jump (2)", "animations/Pistol Super Shot", R8 + "death from front headshot"],
 			"jump": PI + "pistol jump", "hit": R8 + "death from front headshot", "death": R8 + "death from front headshot"},
 		{"id": "rifle", "name": "Rifle", "include": "^pro guns pack", "exclude": "pistol", "weapons": ["rifle"], "strafe": true,
 			"chain": ["Pro guns pack/firing rifle"],
@@ -144,15 +145,19 @@ static func resolve_slots(db: LabAnimDB, lo: Dictionary, female: bool, overrides
 	var cands := candidates(db, lo, female)
 	var slots := {}
 
-	# idle: nome mais curto, sem "looking"/"aiming"/agachado
+	# idle: o loadout pode fixar um; senão, nome mais curto sem "looking"/"aiming"/agachado
 	var best_idle = null
-	for inf in cands:
-		if inf.cat != LabAnimDB.Cat.IDLE or inf.crouch or inf.aim or String(inf.name).contains("looking"):
-			continue
-		if lo.id != "unarmed" and String(inf.name).contains("unarmed"):
-			continue
-		if best_idle == null or String(inf.name).length() < String(best_idle.name).length():
-			best_idle = inf
+	var idle_key := db.find_key(String(lo.get("idle", "")))
+	if idle_key != "":
+		best_idle = db.info(idle_key)
+	if best_idle == null:
+		for inf in cands:
+			if inf.cat != LabAnimDB.Cat.IDLE or inf.crouch or inf.aim or String(inf.name).contains("looking"):
+				continue
+			if lo.id != "unarmed" and String(inf.name).contains("unarmed"):
+				continue
+			if best_idle == null or String(inf.name).length() < String(best_idle.name).length():
+				best_idle = inf
 	if best_idle == null:
 		for inf in cands:
 			if inf.cat == LabAnimDB.Cat.IDLE and not inf.crouch:
@@ -171,11 +176,16 @@ static func resolve_slots(db: LabAnimDB, lo: Dictionary, female: bool, overrides
 	for inf in cands:
 		if inf.cat != LabAnimDB.Cat.LOCO or inf.crouch:
 			continue
+		# Regra rígida: diagonal nunca toca. Se não houver cardinal exata para a
+		# classe/direção, o fallback abaixo usa outra cardinal (inclusive invertida).
+		if not inf.get("exact_dir", true):
+			continue
 		var k := "%s|%s" % [inf.sclass, inf.dir]
 		var score := absf(inf.speed - CLASS_TARGET[inf.sclass])
-		# Prefere clipes que andam reto na cardinal (sem diagonal).
-		if not inf.get("exact_dir", true):
-			score += 0.35
+		# Clipes "arc"/"curve" andam em curva mesmo com deslocamento cardinal.
+		var low_name := String(inf.name).to_lower()
+		if low_name.contains("arc") or low_name.contains("curve") or low_name.contains("circle"):
+			score += 0.5
 		if not best.has(k):
 			best[k] = {"inf": inf, "score": score, "fast": inf}
 		else:
