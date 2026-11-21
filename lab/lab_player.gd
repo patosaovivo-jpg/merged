@@ -611,11 +611,11 @@ func _physics_process(delta: float) -> void:
 			if is_equal_approx(snapped, 0.0) or is_equal_approx(snapped, -0.0):
 				dirname = "f"
 			elif is_equal_approx(snapped, 90.0) or is_equal_approx(snapped, -270.0):
-				dirname = "r"
+				dirname = "l"
 			elif is_equal_approx(snapped, 180.0) or is_equal_approx(snapped, -180.0):
 				dirname = "b"
 			elif is_equal_approx(snapped, -90.0) or is_equal_approx(snapped, 270.0):
-				dirname = "l"
+				dirname = "r"
 			else:
 				dirname = "f"
 			var prev_idx := _dir_to_angle(cur_dir)
@@ -665,10 +665,9 @@ func _physics_process(delta: float) -> void:
 
 
 func _dir_to_angle(d: String) -> float:
-	for k in LabAnimDB.DIR_BY_IDX:
-		if LabAnimDB.DIR_BY_IDX[k] == d:
-			return k * 45.0
-	return 0.0
+	# Ângulos do esquema de 4 direções (0 = frente, +90 = esquerda).
+	var a := {"f": 0.0, "l": 90.0, "b": 180.0, "r": -90.0}
+	return float(a.get(d, 0.0))
 
 
 func _end_action() -> void:
